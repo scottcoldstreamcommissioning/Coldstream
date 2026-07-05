@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Capture — Coldstream Commissioning</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<header class="app-header">
+  <div class="brand"><span class="brand-mark"></span>Capture</div>
+
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-view="ledger">Ledger</button>
+    <button class="tab" data-view="grid">Grid</button>
+    <button class="tab" data-view="untagged">Untagged <span class="badge" id="untagged-badge">0</span></button>
+  </nav>
+
+  <form class="search-form" id="search-form">
+    <span class="search-icon">&#128269;</span>
+    <input type="text" id="search-input" placeholder="Search — “dirty filters”, “every RPZ valve”, “water sample”…" autocomplete="off" />
+  </form>
+
+  <div class="header-spacer"></div>
+
+  <button class="btn btn-lime" id="upload-btn">+ Add photos</button>
+  <input type="file" id="file-input" multiple accept="image/*,.heic,.heif" />
+</header>
+
+<main class="app-main">
+
+  <div id="summary-panel-slot"></div>
+
+  <!-- Ledger view -->
+  <section class="view active" id="view-ledger">
+    <div class="dropzone" id="dropzone">
+      Drop photos here, or <strong>click to choose files</strong> — no need to tag anything first.
+    </div>
+    <div id="ledger-content"></div>
+  </section>
+
+  <!-- Grid view -->
+  <section class="view" id="view-grid">
+    <div class="view-header">
+      <div>
+        <h1 class="view-title">Grid</h1>
+        <div class="view-subtitle">Same photos, thumbnail view</div>
+      </div>
+    </div>
+    <div id="grid-content"></div>
+  </section>
+
+  <!-- Untagged queue -->
+  <section class="view" id="view-untagged">
+    <div class="view-header">
+      <div>
+        <h1 class="view-title">Untagged review queue</h1>
+        <div class="view-subtitle" id="untagged-subtitle">Fill in Site / Project / Work Type, one photo at a time</div>
+      </div>
+    </div>
+    <div id="untagged-content"></div>
+  </section>
+
+  <!-- Search results -->
+  <section class="view" id="view-search">
+    <div class="view-header">
+      <div>
+        <h1 class="view-title" id="search-title">Search</h1>
+        <div class="view-subtitle" id="search-subtitle"></div>
+      </div>
+      <button class="btn btn-ghost" id="clear-search-btn">Clear</button>
+    </div>
+    <div id="search-content"></div>
+  </section>
+
+</main>
+
+<!-- Photo detail modal -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>Photo details</h2>
+      <button class="icon-btn" id="modal-close">&#10005;</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-footer" id="modal-footer"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

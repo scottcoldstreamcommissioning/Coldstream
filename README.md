@@ -4,14 +4,12 @@ Capture is a module of Streamline (Coldstream Commissioning's internal
 engineering platform). It turns the hundreds of site photos engineers take
 every week into searchable, structured knowledge.
 
-## Status: Phase 1, 2 & 3 complete — no UI built yet
+## Status: Phase 1, 2, 3 & 4 complete — MVP running end-to-end
 
-Per the build brief, no UI is being built until the vision pipeline is
-proven reliable on real site photos and photos persist properly. Phase 1
-proved the AI call, Phase 2 expanded its output through the brief's full
-feature list, Phase 3 added real storage behind a swappable interface.
-Everything in this repo right now is backend + CLI tooling — no frontend
-yet (that's Phase 4).
+Phase 1 proved the AI call, Phase 2 expanded its output through the
+brief's full feature list, Phase 3 added real storage behind a swappable
+interface, Phase 4 built the UI on top of all three. Run `npm start` in
+`backend/` and open `http://localhost:3001` for the real app.
 
 ### Why this failed before
 
@@ -27,25 +25,59 @@ into the host document.
 
 ## Architecture
 
-- `backend/` — Node backend. CLI tooling for now; grows into the real
-  Express API layer in Phase 4, once the frontend needs endpoints.
+- `backend/` — Node/Express backend and CLI tooling.
   - `lib/vision.js` — the Claude vision call (image normalization, prompt,
     forced structured output, vocabulary, sanitization). This is the
     function every later phase builds on.
   - `lib/store.js` — storage interface (`addPhoto`/`getPhoto`/`listPhotos`/
-    `updatePhoto`) + its concrete SQLite/filesystem implementation. Any
-    consumer only talks to these five methods, so swapping in a
-    Google Drive-backed implementation later touches this file only.
+    `listUntagged`/`searchPhotos`/`updatePhoto`) + its concrete
+    SQLite/filesystem implementation. Any consumer only talks to this
+    interface, so swapping in a Google Drive-backed implementation later
+    touches this file only.
   - `lib/batch.js` — concurrency pool + rate-limit retry/backoff, shared by
     every script that walks a folder of photos.
+  - `server.js` — the Express API layer the frontend calls over HTTP: photo
+    upload, list/search, image serving, tag editing, per-photo retry, the
+    untagged-review-queue endpoint. No iframe-framing restrictions set —
+    see "Embedding in Streamline" below.
+  - `public/` — the frontend: plain HTML/CSS/JS, no build step, no
+    framework. `index.html` + `styles.css` + `app.js`.
   - `scripts/prove-pipeline.js` — reliability-testing CLI: batch-processes
     a folder through `lib/vision.js` and reports results. No side effects
     (nothing is persisted) — meant to be re-run repeatedly during testing.
-  - `scripts/ingest.js` — the real "upload a batch" path: analyzes and
-    permanently stores photos via `lib/store.js`.
+  - `scripts/ingest.js` — CLI equivalent of the app's upload: analyzes and
+    permanently stores a whole folder in one command (useful for backfilling
+    a phone's camera roll without dragging files one at a time).
   - `scripts/list-photos.js` — queries the store; used to prove persistence
     survives closing and reopening the app.
-- `frontend/` — not started yet. Comes in Phase 4.
+
+## Running the app
+
+```bash
+cd backend
+npm install
+cp .env.example .env   # then add your ANTHROPIC_API_KEY
+npm start              # or `npm run dev` to auto-restart on file changes
+```
+
+Open `http://localhost:3001`. Drop photos onto the page (or click to pick
+files) — no Site/Project/Work Type required before upload. Each photo is
+analyzed and lands in the ledger as soon as it's done; a batch summary
+appears after upload with equipment counts and detected issues. Use the
+**Untagged** tab to work through the tag-later queue one photo at a time,
+the search bar for natural-language search ("dirty filters", "every RPZ
+valve"), and click any ledger row to edit tags, copy the caption, or retry
+a failed analysis with its real error visible.
+
+## Embedding in Streamline
+
+Capture is built to run as its own page at its own URL from day one —
+see the architecture note in the build brief. To embed it as a tab in an
+existing HTML file: `<iframe src="http://localhost:3001">` (or wherever
+it ends up hosted). `server.js` sets no framing-restriction headers
+(`X-Frame-Options`/CSP `frame-ancestors`) and no origin-restrictive CORS,
+so this works whether the host document is a local file or hosted
+elsewhere — no changes needed on Capture's side either way.
 
 ## Running the reliability proof
 
@@ -146,6 +178,31 @@ there with unrelated fields (e.g. equipment) untouched. This is the
 concrete proof persistence survives closing and reopening the app, which
 was a stated limitation of the artifact prototype.
 
+**Phase 4 (UI): built and driven end-to-end in a real browser (Playwright),
+not just eyeballed.** Every feature in the brief's Phase 4 list was
+exercised through the actual interface — clicking, typing, dragging, not
+curling the API underneath: ledger view grouped by day (20 real photos,
+correct grouping/ordering), dump-first upload through the real file input
+(photo analyzed, stored, appears in the ledger, session summary with
+equipment/issue counts rendered), grid view toggle, the untagged queue's
+one-photo-at-a-time flow with auto-advance and live counter, natural-
+language search ("dirty tank" correctly returned only the two matching
+tank photos; a nonsense query correctly returned an empty state),
+editable tags/caption with confirmed round-trip persistence (closed and
+reopened the detail modal, edits were still there), one-tap caption copy,
+and per-photo retry.
+
+Two real bugs were caught and fixed by this process, not by inspection:
+tagging a photo via the detail modal wasn't refreshing the untagged
+counter badge (only the dedicated queue flow was); and when a retried
+photo failed again, the modal kept showing the *previous* error instead
+of the fresh one, because the API client treated the retry endpoint's 502
+response as a hard failure and skipped re-rendering — fixed to still
+re-render from the error response's body, which already contains the
+updated record. Confirmed the fix by marking the actual DOM node before
+retrying and checking it was destroyed and rebuilt, not just re-reading
+identical text.
+
 ## What the vision call returns
 
 Per photo: caption, category (fixed list), equipment (open vocabulary,
@@ -175,10 +232,22 @@ there's no migration surprise later, but no tagging logic exists yet.
 
 ## Next steps
 
-**Phase 4** — UI: ledger view (not grid) as default, dump-first/tag-later
-upload, untagged review queue, natural-language search, editable AI tags,
-one-tap caption copy, per-photo retry with real errors, session summaries.
-This is also when the Express API layer gets built — endpoints only get
-added once the frontend actually needs them.
+All four brief phases are built. What's left is everything explicitly
+deferred along the way:
+
+- Structured numeric extraction from OCR'd readings (chlorine ppm, iron
+  ppm, temperature, flow) into real queryable fields — currently that
+  data exists as raw OCR text, not parsed values.
+- The "future features" list the brief says to architect for but not
+  build yet: automatic report generation, project timelines, before/after
+  comparison, duplicate/blur detection, GPS mapping, voice notes, video
+  uploads, team collaboration, client portals, O&M evidence packs, Google
+  Drive/Calendar integration, other Streamline module integration, asset
+  history/lifecycle tracking, AI defect detection, predictive maintenance.
+- Raising the Anthropic account's rate limits before a real 40-100 photo
+  day's batch (see "Validation status" above) — an account/billing task,
+  not a code task.
+- Actually embedding the `<iframe>` into the real Streamline document,
+  once that file is ready to receive it (see "Embedding in Streamline").
 
 See the full build brief for detail on each phase.
