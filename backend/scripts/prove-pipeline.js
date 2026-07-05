@@ -120,13 +120,32 @@ async function main() {
 
     while (true) {
       try {
-        const { caption, category, equipment, conditions, activities, usage } = await analyzePhoto(client, model, filePath);
+        const { caption, category, equipment, conditions, activities, visibleText, usage } = await analyzePhoto(
+          client,
+          model,
+          filePath
+        );
         const latencyMs = Date.now() - start;
         const equipmentTag = equipment?.length ? ` {${equipment.join(", ")}}` : "";
         const conditionTag = conditions?.length ? ` (${conditions.join(", ")})` : "";
         const activityTag = activities?.length ? ` <${activities.join(", ")}>` : "";
-        console.log(`OK   ${latencyMs.toString().padStart(6)}ms  ${name}  [${category}]${equipmentTag}${conditionTag}${activityTag} ${caption}`);
-        return { file: name, status: "ok", latencyMs, caption, category, equipment, conditions, activities, usage, retries: attempt };
+        const textTag = visibleText?.length ? ` [text: ${visibleText.join(" | ")}]` : "";
+        console.log(
+          `OK   ${latencyMs.toString().padStart(6)}ms  ${name}  [${category}]${equipmentTag}${conditionTag}${activityTag} ${caption}${textTag}`
+        );
+        return {
+          file: name,
+          status: "ok",
+          latencyMs,
+          caption,
+          category,
+          equipment,
+          conditions,
+          activities,
+          visibleText,
+          usage,
+          retries: attempt,
+        };
       } catch (err) {
         if (RETRYABLE_STATUSES.has(err.status) && attempt < MAX_RETRIES) {
           const waitMs = backoffMs(err, attempt);
@@ -167,6 +186,8 @@ async function main() {
     }
   }
 
+  const withVisibleText = succeeded.filter((r) => r.visibleText?.length).length;
+
   const summary = {
     total: results.length,
     succeeded: succeeded.length,
@@ -180,6 +201,7 @@ async function main() {
     equipmentBreakdown,
     conditionBreakdown,
     activityBreakdown,
+    withVisibleText,
   };
 
   console.log("\n--- Summary ---");
@@ -187,6 +209,7 @@ async function main() {
   console.log(`Avg latency:      ${summary.avgLatencyMs}ms  (min ${summary.minLatencyMs}ms / max ${summary.maxLatencyMs}ms)`);
   console.log(`Total batch time: ${(summary.totalBatchTimeMs / 1000).toFixed(1)}s`);
   console.log(`Categories:       ${JSON.stringify(summary.categoryBreakdown)}`);
+  console.log(`Photos w/ text:   ${summary.withVisibleText}/${summary.succeeded}`);
   console.log(`Equipment:        ${JSON.stringify(summary.equipmentBreakdown)}`);
   console.log(`Conditions:       ${JSON.stringify(summary.conditionBreakdown)}`);
   console.log(`Activities:       ${JSON.stringify(summary.activityBreakdown)}`);

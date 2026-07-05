@@ -156,13 +156,19 @@ function buildTool() {
           description:
             "The commissioning/water-hygiene work activity the photo depicts, if identifiable from visual context (e.g. a sample bottle implies Water Sampling, a dip test in a tank implies Inspection). 0-2 items. Empty array if the photo doesn't clearly depict a specific activity (e.g. a bare data plate or equipment shot).",
         },
+        visibleText: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Every distinct piece of legible text in the photo transcribed verbatim as separate items — asset/plant labels, handwritten notes, serials, model numbers, gauge/meter readings, controller/screen lines. One item per distinct label or line, not one big blob. Empty array if nothing legible.",
+        },
       },
-      required: ["caption", "category", "equipment", "conditions", "activities"],
+      required: ["caption", "category", "equipment", "conditions", "activities", "visibleText"],
     },
   };
 }
 
-const PROMPT = `You are looking at a site photo taken by a mechanical/water hygiene commissioning engineer. Call ${TOOL_NAME} with exactly one caption, exactly one category, the equipment visible, any condition tags that clearly apply, and the work activity depicted if identifiable. Do not describe more than what is asked. If there is handwritten or printed text, a gauge reading, or a screen/display visible, include the literal text/value in the caption.
+const PROMPT = `You are looking at a site photo taken by a mechanical/water hygiene commissioning engineer. Call ${TOOL_NAME} with exactly one caption, exactly one category, the equipment visible, any condition tags that clearly apply, the work activity depicted if identifiable, and every distinct piece of legible text transcribed verbatim. Do not describe more than what is asked.
 
 Standard equipment vocabulary (prefer these terms when they fit, but don't force a bad fit): ${EQUIPMENT_VOCABULARY.join(", ")}.
 
@@ -180,7 +186,7 @@ export async function analyzePhoto(client, model, filePath) {
 
   const response = await client.messages.create({
     model,
-    max_tokens: 300,
+    max_tokens: 600,
     tools: [buildTool()],
     tool_choice: { type: "tool", name: TOOL_NAME },
     messages: [
@@ -207,6 +213,7 @@ export async function analyzePhoto(client, model, filePath) {
     equipment: toolUse.input.equipment,
     conditions: toolUse.input.conditions,
     activities: toolUse.input.activities,
+    visibleText: toolUse.input.visibleText,
     usage: response.usage,
   };
 }
