@@ -182,6 +182,25 @@ Condition tags (only apply what's clearly visible, leave empty if nothing notabl
 
 Activities (only apply if the photo clearly depicts one, leave empty otherwise): ${ACTIVITIES.join(", ")}.`;
 
+// A JSON schema enum on a tool_use field is a strong instruction to Claude,
+// not an API-enforced constraint — it can still occasionally emit a value
+// outside the list (observed: "Wet" for conditions, not in CONDITION_TAGS).
+// Silently keeping an out-of-vocabulary tag would corrupt tag-based search
+// filters downstream, so every enum field is sanitized after the call.
+function sanitizeEnumArray(values, allowed) {
+  const allowedSet = new Set(allowed);
+  const valid = [];
+  const dropped = [];
+  for (const v of Array.isArray(values) ? values : []) {
+    (allowedSet.has(v) ? valid : dropped).push(v);
+  }
+  return { valid, dropped };
+}
+
+function sanitizeEnum(value, allowed, fallback) {
+  return allowed.includes(value) ? { valid: value, dropped: null } : { valid: fallback, dropped: value };
+}
+
 /**
  * Sends one photo to Claude vision and returns its caption + category.
  * Throws the raw SDK error on failure — callers must not swallow or
@@ -213,12 +232,18 @@ export async function analyzePhoto(client, model, filePath) {
     );
   }
 
+  const category = sanitizeEnum(toolUse.input.category, CATEGORIES, "Other");
+  const conditions = sanitizeEnumArray(toolUse.input.conditions, CONDITION_TAGS);
+  const activities = sanitizeEnumArray(toolUse.input.activities, ACTIVITIES);
+  const droppedTags = [category.dropped, ...conditions.dropped, ...activities.dropped].filter(Boolean);
+
   return {
     caption: toolUse.input.caption,
-    category: toolUse.input.category,
+    category: category.valid,
     equipment: toolUse.input.equipment,
-    conditions: toolUse.input.conditions,
-    activities: toolUse.input.activities,
+    conditions: conditions.valid,
+    activities: activities.valid,
+    droppedTags,
     visibleText: toolUse.input.visibleText,
     keywords: toolUse.input.keywords,
     usage: response.usage,
