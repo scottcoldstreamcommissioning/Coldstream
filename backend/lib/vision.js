@@ -108,9 +108,11 @@ export const SUPPORTED_EXTENSIONS = new Set([
  * Normalizes any supported input image into a size-capped JPEG so every
  * request is well under the API's payload limit regardless of source
  * (phone photos routinely arrive larger than that limit once base64-encoded).
+ * @param {string|Buffer} input - a file path (CLI scripts) or raw bytes
+ *   (server.js, which gets an in-memory upload with no file on disk yet).
  */
-async function loadImageAsBase64(filePath) {
-  const buffer = await sharp(filePath, { failOn: "none" })
+async function loadImageAsBase64(input) {
+  const buffer = await sharp(input, { failOn: "none" })
     .rotate() // apply EXIF orientation before resizing
     .resize({ width: MAX_EDGE_PX, height: MAX_EDGE_PX, fit: "inside", withoutEnlargement: true })
     .jpeg({ quality: JPEG_QUALITY })
@@ -210,11 +212,12 @@ function sanitizeEnum(value, allowed, fallback) {
 
 /**
  * Sends one photo to Claude vision and returns its caption + category.
+ * `input` is a file path or a raw Buffer — see loadImageAsBase64.
  * Throws the raw SDK error on failure — callers must not swallow or
  * re-wrap it, per the Phase 1 requirement to see real errors.
  */
-export async function analyzePhoto(client, model, filePath) {
-  const { data, mediaType } = await loadImageAsBase64(filePath);
+export async function analyzePhoto(client, model, input) {
+  const { data, mediaType } = await loadImageAsBase64(input);
 
   const response = await client.messages.create({
     model,
