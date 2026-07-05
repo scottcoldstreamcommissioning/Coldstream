@@ -120,16 +120,27 @@ async function main() {
 
     while (true) {
       try {
-        const { caption, category, equipment, conditions, activities, droppedTags, visibleText, keywords, usage } =
-          await analyzePhoto(client, model, filePath);
+        const {
+          caption,
+          category,
+          equipment,
+          conditions,
+          activities,
+          droppedTags,
+          visibleText,
+          keywords,
+          confidence,
+          usage,
+        } = await analyzePhoto(client, model, filePath);
         const latencyMs = Date.now() - start;
         const equipmentTag = equipment?.length ? ` {${equipment.join(", ")}}` : "";
         const conditionTag = conditions?.length ? ` (${conditions.join(", ")})` : "";
         const activityTag = activities?.length ? ` <${activities.join(", ")}>` : "";
         const textTag = visibleText?.length ? ` [text: ${visibleText.join(" | ")}]` : "";
         const keywordTag = keywords?.length ? ` [kw: ${keywords.join(", ")}]` : "";
+        const confidenceTag = ` (conf ${confidence.toFixed(2)})`;
         console.log(
-          `OK   ${latencyMs.toString().padStart(6)}ms  ${name}  [${category}]${equipmentTag}${conditionTag}${activityTag} ${caption}${textTag}${keywordTag}`
+          `OK   ${latencyMs.toString().padStart(6)}ms  ${name}  [${category}]${equipmentTag}${conditionTag}${activityTag}${confidenceTag} ${caption}${textTag}${keywordTag}`
         );
         if (droppedTags?.length) {
           console.log(`WARN  out-of-vocabulary tag(s) dropped for ${name}: ${droppedTags.join(", ")}`);
@@ -146,6 +157,7 @@ async function main() {
           droppedTags,
           visibleText,
           keywords,
+          confidence,
           usage,
           retries: attempt,
         };
@@ -194,6 +206,11 @@ async function main() {
     ? Math.round((succeeded.reduce((sum, r) => sum + (r.keywords?.length ?? 0), 0) / succeeded.length) * 10) / 10
     : 0;
   const totalDroppedTags = succeeded.reduce((sum, r) => sum + (r.droppedTags?.length ?? 0), 0);
+  const LOW_CONFIDENCE_THRESHOLD = 0.6;
+  const avgConfidence = succeeded.length
+    ? Math.round((succeeded.reduce((sum, r) => sum + (r.confidence ?? 0), 0) / succeeded.length) * 100) / 100
+    : 0;
+  const lowConfidenceCount = succeeded.filter((r) => r.confidence < LOW_CONFIDENCE_THRESHOLD).length;
 
   const summary = {
     total: results.length,
@@ -211,6 +228,8 @@ async function main() {
     activityBreakdown,
     withVisibleText,
     avgKeywordCount,
+    avgConfidence,
+    lowConfidenceCount,
   };
 
   console.log("\n--- Summary ---");
@@ -218,6 +237,7 @@ async function main() {
   console.log(`Avg latency:      ${summary.avgLatencyMs}ms  (min ${summary.minLatencyMs}ms / max ${summary.maxLatencyMs}ms)`);
   console.log(`Total batch time: ${(summary.totalBatchTimeMs / 1000).toFixed(1)}s`);
   console.log(`Avg keywords:     ${summary.avgKeywordCount}/photo`);
+  console.log(`Avg confidence:   ${summary.avgConfidence}  (${summary.lowConfidenceCount} below ${LOW_CONFIDENCE_THRESHOLD} threshold)`);
   console.log(`Dropped tags:     ${summary.totalDroppedTags} out-of-vocabulary value(s) sanitized`);
   console.log(`Categories:       ${JSON.stringify(summary.categoryBreakdown)}`);
   console.log(`Photos w/ text:   ${summary.withVisibleText}/${summary.succeeded}`);

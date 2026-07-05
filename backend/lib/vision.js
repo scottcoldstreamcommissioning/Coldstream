@@ -168,13 +168,20 @@ function buildTool() {
           description:
             "5-12 natural-language search terms an engineer might type to find this photo later — synonyms and colloquial phrasing, not a repeat of the structured tags above (e.g. 'water tank' not 'Cold Water Storage Tanks', 'biofilm', 'scale buildup', 'leak', 'fault alarm'). Lowercase, no duplicates of each other.",
         },
+        confidence: {
+          type: "number",
+          minimum: 0,
+          maximum: 1,
+          description:
+            "Your confidence (0-1) in the overall accuracy of this analysis. Lower it for blurry/dark/ambiguous photos, partially obscured text, or genuine uncertainty about equipment identification — this drives which photos get routed to a human review queue, so don't default to a high number out of habit.",
+        },
       },
-      required: ["caption", "category", "equipment", "conditions", "activities", "visibleText", "keywords"],
+      required: ["caption", "category", "equipment", "conditions", "activities", "visibleText", "keywords", "confidence"],
     },
   };
 }
 
-const PROMPT = `You are looking at a site photo taken by a mechanical/water hygiene commissioning engineer. Call ${TOOL_NAME} with exactly one caption, exactly one category, the equipment visible, any condition tags that clearly apply, the work activity depicted if identifiable, every distinct piece of legible text transcribed verbatim, and natural-language search keywords. Do not describe more than what is asked.
+const PROMPT = `You are looking at a site photo taken by a mechanical/water hygiene commissioning engineer. Call ${TOOL_NAME} with exactly one caption, exactly one category, the equipment visible, any condition tags that clearly apply, the work activity depicted if identifiable, every distinct piece of legible text transcribed verbatim, natural-language search keywords, and your confidence in this analysis. Do not describe more than what is asked.
 
 Standard equipment vocabulary (prefer these terms when they fit, but don't force a bad fit): ${EQUIPMENT_VOCABULARY.join(", ")}.
 
@@ -236,6 +243,9 @@ export async function analyzePhoto(client, model, filePath) {
   const conditions = sanitizeEnumArray(toolUse.input.conditions, CONDITION_TAGS);
   const activities = sanitizeEnumArray(toolUse.input.activities, ACTIVITIES);
   const droppedTags = [category.dropped, ...conditions.dropped, ...activities.dropped].filter(Boolean);
+  // min/max on a number field is likewise advisory, not enforced — clamp defensively.
+  const rawConfidence = Number(toolUse.input.confidence);
+  const confidence = Number.isFinite(rawConfidence) ? Math.max(0, Math.min(1, rawConfidence)) : 0;
 
   return {
     caption: toolUse.input.caption,
@@ -246,6 +256,7 @@ export async function analyzePhoto(client, model, filePath) {
     droppedTags,
     visibleText: toolUse.input.visibleText,
     keywords: toolUse.input.keywords,
+    confidence,
     usage: response.usage,
   };
 }
