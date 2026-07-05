@@ -78,24 +78,26 @@ A full JSON report (per-photo results + aggregate) is written to
 gitignored, as is any `test-photos/` or `photos/` folder — real site
 photos should never be committed to this repo.
 
-### Validation status
+### Validation status — Phase 1 gate met
 
-Run against 10 real Coldstream site photos (water sample bottles, data
-plates, BMS controller screens, plant room pipework, ductwork, equipment):
-**100% success**, captions correctly read handwritten labels, gauge/screen
-text, and data plate details. The pipeline call itself is proven.
+Run against 20 real Coldstream site photos — water sample bottles (incl.
+handwritten labels), a cold water storage tank interior (staining/
+limescale/biofilm), a sump dip-test, plant room pipework (Grundfos and
+Wilo pump arrays, underfloor heating manifolds), BMS/controller screens,
+data plates, and ductwork: **100% success (20/20)**, well above the
+brief's >90% target. Captions correctly read handwritten labels, gauge/
+screen text (including multi-line alarm/fault messages), and data plate
+details in every case.
 
-Two things to sort out before a full-scale batch run, both account-level,
-not code-level:
-
-- The Anthropic account used for testing has low default rate limits (5
-  requests/min, 10k input tokens/min) — consistent with no billing method
-  attached yet. Retry-with-backoff (honoring `Retry-After`) is built into
-  the script to survive this, but a 40-100 photo day's batch will still
-  take a long time until the limit is raised at
-  console.anthropic.com/settings/limits.
-- Only 10 of the brief's recommended 15-20 photo sample has been run so
-  far — worth topping up before formally closing out the Phase 1 gate.
+One thing to sort out before a full-scale (40-100 photo) day's-batch run,
+account-level not code-level: the Anthropic account used for testing has
+low default rate limits (5 requests/min, 10k input tokens/min) —
+consistent with no billing method attached yet. Retry-with-backoff
+(honoring `Retry-After`) is built into the script to survive this, but
+it inflates latency (avg ~35s/photo across the 20-photo run, vs. ~3-20s
+for a call that doesn't get rate-limited) and a 100-photo batch would
+take a long time until the limit is raised at
+console.anthropic.com/settings/limits.
 
 ## What Phase 1 asks for exactly
 
