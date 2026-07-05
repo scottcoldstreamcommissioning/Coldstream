@@ -19,6 +19,37 @@ export const CATEGORIES = [
   "Other",
 ];
 
+// From the build brief — expected to keep growing. The model is told to
+// prefer these terms but isn't restricted to them (a JSON schema enum would
+// silently force a bad fit whenever a photo shows something not yet listed).
+export const EQUIPMENT_VOCABULARY = [
+  "Air Handling Units",
+  "MVHR Units",
+  "FCUs",
+  "Fans",
+  "Diffusers",
+  "Grilles",
+  "Dampers",
+  "Fire Dampers",
+  "Pumps",
+  "Plate Heat Exchangers",
+  "Expansion Vessels",
+  "Buffer Vessels",
+  "Calorifiers",
+  "Cold Water Storage Tanks",
+  "RPZ Valves",
+  "PRVs",
+  "Balancing Valves",
+  "Sensors",
+  "BMS Controllers",
+  "Sample Points",
+  "Water Tanks",
+  "Pipework",
+  "Filters",
+  "Heat Pumps",
+  "Pressurisation Units",
+];
+
 export const SUPPORTED_EXTENSIONS = new Set([
   ".jpg",
   ".jpeg",
@@ -49,7 +80,7 @@ const TOOL_NAME = "record_photo_analysis";
 function buildTool() {
   return {
     name: TOOL_NAME,
-    description: "Record the single caption and category for this site photo.",
+    description: "Record the caption, category, and equipment detected for this site photo.",
     input_schema: {
       type: "object",
       properties: {
@@ -63,13 +94,21 @@ function buildTool() {
           enum: CATEGORIES,
           description: "The single best-fit category for this photo.",
         },
+        equipment: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Distinct pieces of equipment visibly identifiable in the photo (0-6 items). Prefer standard terms (e.g. Pumps, BMS Controllers, Cold Water Storage Tanks) but use a concise engineering term for anything not on the standard list. Empty array if no specific equipment is identifiable.",
+        },
       },
-      required: ["caption", "category"],
+      required: ["caption", "category", "equipment"],
     },
   };
 }
 
-const PROMPT = `You are looking at a site photo taken by a mechanical/water hygiene commissioning engineer. Call ${TOOL_NAME} with exactly one caption and exactly one category for this photo. Do not describe more than what is asked. If there is handwritten or printed text, a gauge reading, or a screen/display visible, include the literal text/value in the caption.`;
+const PROMPT = `You are looking at a site photo taken by a mechanical/water hygiene commissioning engineer. Call ${TOOL_NAME} with exactly one caption, exactly one category, and the equipment visible in this photo. Do not describe more than what is asked. If there is handwritten or printed text, a gauge reading, or a screen/display visible, include the literal text/value in the caption.
+
+Standard equipment vocabulary (prefer these terms when they fit, but don't force a bad fit): ${EQUIPMENT_VOCABULARY.join(", ")}.`;
 
 /**
  * Sends one photo to Claude vision and returns its caption + category.
@@ -105,6 +144,7 @@ export async function analyzePhoto(client, model, filePath) {
   return {
     caption: toolUse.input.caption,
     category: toolUse.input.category,
+    equipment: toolUse.input.equipment,
     usage: response.usage,
   };
 }

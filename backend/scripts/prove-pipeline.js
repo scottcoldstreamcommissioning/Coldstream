@@ -120,10 +120,11 @@ async function main() {
 
     while (true) {
       try {
-        const { caption, category, usage } = await analyzePhoto(client, model, filePath);
+        const { caption, category, equipment, usage } = await analyzePhoto(client, model, filePath);
         const latencyMs = Date.now() - start;
-        console.log(`OK   ${latencyMs.toString().padStart(6)}ms  ${name}  [${category}] ${caption}`);
-        return { file: name, status: "ok", latencyMs, caption, category, usage, retries: attempt };
+        const equipmentTag = equipment?.length ? ` {${equipment.join(", ")}}` : "";
+        console.log(`OK   ${latencyMs.toString().padStart(6)}ms  ${name}  [${category}]${equipmentTag} ${caption}`);
+        return { file: name, status: "ok", latencyMs, caption, category, equipment, usage, retries: attempt };
       } catch (err) {
         if (RETRYABLE_STATUSES.has(err.status) && attempt < MAX_RETRIES) {
           const waitMs = backoffMs(err, attempt);
@@ -148,8 +149,12 @@ async function main() {
     : 0;
 
   const categoryBreakdown = {};
+  const equipmentBreakdown = {};
   for (const r of succeeded) {
     categoryBreakdown[r.category] = (categoryBreakdown[r.category] ?? 0) + 1;
+    for (const item of r.equipment ?? []) {
+      equipmentBreakdown[item] = (equipmentBreakdown[item] ?? 0) + 1;
+    }
   }
 
   const summary = {
@@ -162,6 +167,7 @@ async function main() {
     maxLatencyMs: succeeded.length ? Math.max(...succeeded.map((r) => r.latencyMs)) : null,
     totalBatchTimeMs,
     categoryBreakdown,
+    equipmentBreakdown,
   };
 
   console.log("\n--- Summary ---");
@@ -169,6 +175,7 @@ async function main() {
   console.log(`Avg latency:      ${summary.avgLatencyMs}ms  (min ${summary.minLatencyMs}ms / max ${summary.maxLatencyMs}ms)`);
   console.log(`Total batch time: ${(summary.totalBatchTimeMs / 1000).toFixed(1)}s`);
   console.log(`Categories:       ${JSON.stringify(summary.categoryBreakdown)}`);
+  console.log(`Equipment:        ${JSON.stringify(summary.equipmentBreakdown)}`);
 
   if (failed.length > 0) {
     console.log(`\n${failed.length} failure(s) — full raw errors:`);
