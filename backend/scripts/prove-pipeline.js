@@ -39,6 +39,23 @@ function serializeError(err) {
   };
 }
 
+const RETRYABLE_STATUSES = new Set([429, 503, 529]);
+const MAX_RETRIES = 5;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Anthropic's API returns 429s constantly on low-tier accounts under any
+// real concurrency — this isn't an edge case, it's the normal shape of a
+// batch run. Retry-After is honored when present; otherwise back off
+// exponentially so a real 40-100 photo batch survives its own rate limit.
+function backoffMs(err, attempt) {
+  const retryAfter = err.headers?.["retry-after"];
+  if (retryAfter) return Math.ceil(Number(retryAfter) * 1000) + 500;
+  return Math.min(2 ** attempt * 2000, 30000);
+}
+
 async function runPool(items, concurrency, worker) {
   const results = new Array(items.length);
   let cursor = 0;
@@ -99,16 +116,27 @@ async function main() {
   const results = await runPool(files, concurrency, async (filePath) => {
     const start = Date.now();
     const name = path.basename(filePath);
-    try {
-      const { caption, category, usage } = await analyzePhoto(client, model, filePath);
-      const latencyMs = Date.now() - start;
-      console.log(`OK   ${latencyMs.toString().padStart(6)}ms  ${name}  [${category}] ${caption}`);
-      return { file: name, status: "ok", latencyMs, caption, category, usage };
-    } catch (err) {
-      const latencyMs = Date.now() - start;
-      const serialized = serializeError(err);
-      console.log(`FAIL ${latencyMs.toString().padStart(6)}ms  ${name}  ${serialized.status ?? ""} ${serialized.message}`);
-      return { file: name, status: "fail", latencyMs, error: serialized };
+    let attempt = 0;
+
+    while (true) {
+      try {
+        const { caption, category, usage } = await analyzePhoto(client, model, filePath);
+        const latencyMs = Date.now() - start;
+        console.log(`OK   ${latencyMs.toString().padStart(6)}ms  ${name}  [${category}] ${caption}`);
+        return { file: name, status: "ok", latencyMs, caption, category, usage, retries: attempt };
+      } catch (err) {
+        if (RETRYABLE_STATUSES.has(err.status) && attempt < MAX_RETRIES) {
+          const waitMs = backoffMs(err, attempt);
+          attempt++;
+          console.log(`WAIT ${waitMs.toString().padStart(6)}ms  ${name}  retry ${attempt}/${MAX_RETRIES} after ${err.status}`);
+          await sleep(waitMs);
+          continue;
+        }
+        const latencyMs = Date.now() - start;
+        const serialized = serializeError(err);
+        console.log(`FAIL ${latencyMs.toString().padStart(6)}ms  ${name}  ${serialized.status ?? ""} ${serialized.message}`);
+        return { file: name, status: "fail", latencyMs, error: serialized, retries: attempt };
+      }
     }
   });
 

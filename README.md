@@ -78,6 +78,25 @@ A full JSON report (per-photo results + aggregate) is written to
 gitignored, as is any `test-photos/` or `photos/` folder — real site
 photos should never be committed to this repo.
 
+### Validation status
+
+Run against 10 real Coldstream site photos (water sample bottles, data
+plates, BMS controller screens, plant room pipework, ductwork, equipment):
+**100% success**, captions correctly read handwritten labels, gauge/screen
+text, and data plate details. The pipeline call itself is proven.
+
+Two things to sort out before a full-scale batch run, both account-level,
+not code-level:
+
+- The Anthropic account used for testing has low default rate limits (5
+  requests/min, 10k input tokens/min) — consistent with no billing method
+  attached yet. Retry-with-backoff (honoring `Retry-After`) is built into
+  the script to survive this, but a 40-100 photo day's batch will still
+  take a long time until the limit is raised at
+  console.anthropic.com/settings/limits.
+- Only 10 of the brief's recommended 15-20 photo sample has been run so
+  far — worth topping up before formally closing out the Phase 1 gate.
+
 ## What Phase 1 asks for exactly
 
 One caption, one category — nothing more. Category is a small fixed list
