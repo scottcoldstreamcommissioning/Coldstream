@@ -48,6 +48,33 @@ export const EQUIPMENT_VOCABULARY = [
   "Filters",
   "Heat Pumps",
   "Pressurisation Units",
+  // Dedicated water treatment tag vocabulary — the brief calls for water
+  // sampling/flushing/dosing to get first-class treatment, not be lumped in
+  // as generic equipment shots.
+  "Dosing Point",
+  "TMV",
+  "Calorifier Outlet",
+  "Cold Water Outlet",
+  "Shower Head",
+  "Tap Outlet",
+  "Flush Point",
+];
+
+// From the build brief — the standard activity list plus the dedicated
+// work types called out for first-class treatment (Chemical Dosing).
+// Closed set like conditions: strict enum for consistent filtering.
+export const ACTIVITIES = [
+  "Commissioning",
+  "Flushing",
+  "Water Sampling",
+  "Legionella Sampling",
+  "Disinfection/Chlorination",
+  "Chemical Dosing",
+  "Temperature Testing",
+  "Pressure Testing",
+  "Inspection",
+  "Installation",
+  "Fault Finding",
 ];
 
 // From the build brief — a closed, specific set (unlike equipment), so it's
@@ -97,7 +124,7 @@ const TOOL_NAME = "record_photo_analysis";
 function buildTool() {
   return {
     name: TOOL_NAME,
-    description: "Record the caption, category, equipment, and condition tags for this site photo.",
+    description: "Record the caption, category, equipment, condition tags, and activity for this site photo.",
     input_schema: {
       type: "object",
       properties: {
@@ -123,17 +150,25 @@ function buildTool() {
           description:
             "Only conditions clearly visible in the photo itself — do not guess. Empty array if nothing notable applies. 'Before'/'After' only if the photo is explicitly labelled or captioned as such by the engineer; never infer it.",
         },
+        activities: {
+          type: "array",
+          items: { type: "string", enum: ACTIVITIES },
+          description:
+            "The commissioning/water-hygiene work activity the photo depicts, if identifiable from visual context (e.g. a sample bottle implies Water Sampling, a dip test in a tank implies Inspection). 0-2 items. Empty array if the photo doesn't clearly depict a specific activity (e.g. a bare data plate or equipment shot).",
+        },
       },
-      required: ["caption", "category", "equipment", "conditions"],
+      required: ["caption", "category", "equipment", "conditions", "activities"],
     },
   };
 }
 
-const PROMPT = `You are looking at a site photo taken by a mechanical/water hygiene commissioning engineer. Call ${TOOL_NAME} with exactly one caption, exactly one category, the equipment visible, and any condition tags that clearly apply. Do not describe more than what is asked. If there is handwritten or printed text, a gauge reading, or a screen/display visible, include the literal text/value in the caption.
+const PROMPT = `You are looking at a site photo taken by a mechanical/water hygiene commissioning engineer. Call ${TOOL_NAME} with exactly one caption, exactly one category, the equipment visible, any condition tags that clearly apply, and the work activity depicted if identifiable. Do not describe more than what is asked. If there is handwritten or printed text, a gauge reading, or a screen/display visible, include the literal text/value in the caption.
 
 Standard equipment vocabulary (prefer these terms when they fit, but don't force a bad fit): ${EQUIPMENT_VOCABULARY.join(", ")}.
 
-Condition tags (only apply what's clearly visible, leave empty if nothing notable): ${CONDITION_TAGS.join(", ")}.`;
+Condition tags (only apply what's clearly visible, leave empty if nothing notable): ${CONDITION_TAGS.join(", ")}.
+
+Activities (only apply if the photo clearly depicts one, leave empty otherwise): ${ACTIVITIES.join(", ")}.`;
 
 /**
  * Sends one photo to Claude vision and returns its caption + category.
@@ -171,6 +206,7 @@ export async function analyzePhoto(client, model, filePath) {
     category: toolUse.input.category,
     equipment: toolUse.input.equipment,
     conditions: toolUse.input.conditions,
+    activities: toolUse.input.activities,
     usage: response.usage,
   };
 }

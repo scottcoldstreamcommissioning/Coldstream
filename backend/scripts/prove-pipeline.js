@@ -120,12 +120,13 @@ async function main() {
 
     while (true) {
       try {
-        const { caption, category, equipment, conditions, usage } = await analyzePhoto(client, model, filePath);
+        const { caption, category, equipment, conditions, activities, usage } = await analyzePhoto(client, model, filePath);
         const latencyMs = Date.now() - start;
         const equipmentTag = equipment?.length ? ` {${equipment.join(", ")}}` : "";
         const conditionTag = conditions?.length ? ` (${conditions.join(", ")})` : "";
-        console.log(`OK   ${latencyMs.toString().padStart(6)}ms  ${name}  [${category}]${equipmentTag}${conditionTag} ${caption}`);
-        return { file: name, status: "ok", latencyMs, caption, category, equipment, conditions, usage, retries: attempt };
+        const activityTag = activities?.length ? ` <${activities.join(", ")}>` : "";
+        console.log(`OK   ${latencyMs.toString().padStart(6)}ms  ${name}  [${category}]${equipmentTag}${conditionTag}${activityTag} ${caption}`);
+        return { file: name, status: "ok", latencyMs, caption, category, equipment, conditions, activities, usage, retries: attempt };
       } catch (err) {
         if (RETRYABLE_STATUSES.has(err.status) && attempt < MAX_RETRIES) {
           const waitMs = backoffMs(err, attempt);
@@ -152,6 +153,7 @@ async function main() {
   const categoryBreakdown = {};
   const equipmentBreakdown = {};
   const conditionBreakdown = {};
+  const activityBreakdown = {};
   for (const r of succeeded) {
     categoryBreakdown[r.category] = (categoryBreakdown[r.category] ?? 0) + 1;
     for (const item of r.equipment ?? []) {
@@ -159,6 +161,9 @@ async function main() {
     }
     for (const tag of r.conditions ?? []) {
       conditionBreakdown[tag] = (conditionBreakdown[tag] ?? 0) + 1;
+    }
+    for (const activity of r.activities ?? []) {
+      activityBreakdown[activity] = (activityBreakdown[activity] ?? 0) + 1;
     }
   }
 
@@ -174,6 +179,7 @@ async function main() {
     categoryBreakdown,
     equipmentBreakdown,
     conditionBreakdown,
+    activityBreakdown,
   };
 
   console.log("\n--- Summary ---");
@@ -183,6 +189,7 @@ async function main() {
   console.log(`Categories:       ${JSON.stringify(summary.categoryBreakdown)}`);
   console.log(`Equipment:        ${JSON.stringify(summary.equipmentBreakdown)}`);
   console.log(`Conditions:       ${JSON.stringify(summary.conditionBreakdown)}`);
+  console.log(`Activities:       ${JSON.stringify(summary.activityBreakdown)}`);
 
   if (failed.length > 0) {
     console.log(`\n${failed.length} failure(s) — full raw errors:`);
