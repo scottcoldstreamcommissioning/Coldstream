@@ -120,18 +120,16 @@ async function main() {
 
     while (true) {
       try {
-        const { caption, category, equipment, conditions, activities, visibleText, usage } = await analyzePhoto(
-          client,
-          model,
-          filePath
-        );
+        const { caption, category, equipment, conditions, activities, visibleText, keywords, usage } =
+          await analyzePhoto(client, model, filePath);
         const latencyMs = Date.now() - start;
         const equipmentTag = equipment?.length ? ` {${equipment.join(", ")}}` : "";
         const conditionTag = conditions?.length ? ` (${conditions.join(", ")})` : "";
         const activityTag = activities?.length ? ` <${activities.join(", ")}>` : "";
         const textTag = visibleText?.length ? ` [text: ${visibleText.join(" | ")}]` : "";
+        const keywordTag = keywords?.length ? ` [kw: ${keywords.join(", ")}]` : "";
         console.log(
-          `OK   ${latencyMs.toString().padStart(6)}ms  ${name}  [${category}]${equipmentTag}${conditionTag}${activityTag} ${caption}${textTag}`
+          `OK   ${latencyMs.toString().padStart(6)}ms  ${name}  [${category}]${equipmentTag}${conditionTag}${activityTag} ${caption}${textTag}${keywordTag}`
         );
         return {
           file: name,
@@ -143,6 +141,7 @@ async function main() {
           conditions,
           activities,
           visibleText,
+          keywords,
           usage,
           retries: attempt,
         };
@@ -187,6 +186,9 @@ async function main() {
   }
 
   const withVisibleText = succeeded.filter((r) => r.visibleText?.length).length;
+  const avgKeywordCount = succeeded.length
+    ? Math.round((succeeded.reduce((sum, r) => sum + (r.keywords?.length ?? 0), 0) / succeeded.length) * 10) / 10
+    : 0;
 
   const summary = {
     total: results.length,
@@ -202,12 +204,14 @@ async function main() {
     conditionBreakdown,
     activityBreakdown,
     withVisibleText,
+    avgKeywordCount,
   };
 
   console.log("\n--- Summary ---");
   console.log(`Success rate:     ${summary.successRatePct}% (${summary.succeeded}/${summary.total})`);
   console.log(`Avg latency:      ${summary.avgLatencyMs}ms  (min ${summary.minLatencyMs}ms / max ${summary.maxLatencyMs}ms)`);
   console.log(`Total batch time: ${(summary.totalBatchTimeMs / 1000).toFixed(1)}s`);
+  console.log(`Avg keywords:     ${summary.avgKeywordCount}/photo`);
   console.log(`Categories:       ${JSON.stringify(summary.categoryBreakdown)}`);
   console.log(`Photos w/ text:   ${summary.withVisibleText}/${summary.succeeded}`);
   console.log(`Equipment:        ${JSON.stringify(summary.equipmentBreakdown)}`);

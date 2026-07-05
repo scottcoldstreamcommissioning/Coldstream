@@ -162,13 +162,19 @@ function buildTool() {
           description:
             "Every distinct piece of legible text in the photo transcribed verbatim as separate items — asset/plant labels, handwritten notes, serials, model numbers, gauge/meter readings, controller/screen lines. One item per distinct label or line, not one big blob. Empty array if nothing legible.",
         },
+        keywords: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "5-12 natural-language search terms an engineer might type to find this photo later — synonyms and colloquial phrasing, not a repeat of the structured tags above (e.g. 'water tank' not 'Cold Water Storage Tanks', 'biofilm', 'scale buildup', 'leak', 'fault alarm'). Lowercase, no duplicates of each other.",
+        },
       },
-      required: ["caption", "category", "equipment", "conditions", "activities", "visibleText"],
+      required: ["caption", "category", "equipment", "conditions", "activities", "visibleText", "keywords"],
     },
   };
 }
 
-const PROMPT = `You are looking at a site photo taken by a mechanical/water hygiene commissioning engineer. Call ${TOOL_NAME} with exactly one caption, exactly one category, the equipment visible, any condition tags that clearly apply, the work activity depicted if identifiable, and every distinct piece of legible text transcribed verbatim. Do not describe more than what is asked.
+const PROMPT = `You are looking at a site photo taken by a mechanical/water hygiene commissioning engineer. Call ${TOOL_NAME} with exactly one caption, exactly one category, the equipment visible, any condition tags that clearly apply, the work activity depicted if identifiable, every distinct piece of legible text transcribed verbatim, and natural-language search keywords. Do not describe more than what is asked.
 
 Standard equipment vocabulary (prefer these terms when they fit, but don't force a bad fit): ${EQUIPMENT_VOCABULARY.join(", ")}.
 
@@ -186,7 +192,7 @@ export async function analyzePhoto(client, model, filePath) {
 
   const response = await client.messages.create({
     model,
-    max_tokens: 600,
+    max_tokens: 700,
     tools: [buildTool()],
     tool_choice: { type: "tool", name: TOOL_NAME },
     messages: [
@@ -214,6 +220,7 @@ export async function analyzePhoto(client, model, filePath) {
     conditions: toolUse.input.conditions,
     activities: toolUse.input.activities,
     visibleText: toolUse.input.visibleText,
+    keywords: toolUse.input.keywords,
     usage: response.usage,
   };
 }
