@@ -4,13 +4,14 @@ Capture is a module of Streamline (Coldstream Commissioning's internal
 engineering platform). It turns the hundreds of site photos engineers take
 every week into searchable, structured knowledge.
 
-## Status: Phase 1 & 2 complete — AI output proven, no UI built yet
+## Status: Phase 1, 2 & 3 complete — no UI built yet
 
 Per the build brief, no UI is being built until the vision pipeline is
-proven reliable on real site photos. Everything in this repo right now is
-that proof: a CLI script that sends photos to Claude vision and reports
-whether it works, expanded incrementally through the brief's full Phase 2
-feature list.
+proven reliable on real site photos and photos persist properly. Phase 1
+proved the AI call, Phase 2 expanded its output through the brief's full
+feature list, Phase 3 added real storage behind a swappable interface.
+Everything in this repo right now is backend + CLI tooling — no frontend
+yet (that's Phase 4).
 
 ### Why this failed before
 
@@ -26,17 +27,27 @@ into the host document.
 
 ## Architecture
 
-- `backend/` — Node backend. Right now it's just the proving script; it
-  grows into the real API layer (Express) in Phase 3.
-  - `lib/vision.js` — the Claude vision call itself (image normalization,
-    prompt, forced structured output, vocabulary, sanitization). This is
-    the function every later phase builds on.
-  - `scripts/prove-pipeline.js` — proving CLI: batch-processes a folder of
-    photos through `lib/vision.js` and reports results.
-- `frontend/` — not started yet. Comes in Phase 4, after storage (Phase 3)
-  and the expanded AI output (Phase 2) are solid.
+- `backend/` — Node backend. CLI tooling for now; grows into the real
+  Express API layer in Phase 4, once the frontend needs endpoints.
+  - `lib/vision.js` — the Claude vision call (image normalization, prompt,
+    forced structured output, vocabulary, sanitization). This is the
+    function every later phase builds on.
+  - `lib/store.js` — storage interface (`addPhoto`/`getPhoto`/`listPhotos`/
+    `updatePhoto`) + its concrete SQLite/filesystem implementation. Any
+    consumer only talks to these five methods, so swapping in a
+    Google Drive-backed implementation later touches this file only.
+  - `lib/batch.js` — concurrency pool + rate-limit retry/backoff, shared by
+    every script that walks a folder of photos.
+  - `scripts/prove-pipeline.js` — reliability-testing CLI: batch-processes
+    a folder through `lib/vision.js` and reports results. No side effects
+    (nothing is persisted) — meant to be re-run repeatedly during testing.
+  - `scripts/ingest.js` — the real "upload a batch" path: analyzes and
+    permanently stores photos via `lib/store.js`.
+  - `scripts/list-photos.js` — queries the store; used to prove persistence
+    survives closing and reopening the app.
+- `frontend/` — not started yet. Comes in Phase 4.
 
-## Running the Phase 1 proof
+## Running the reliability proof
 
 ```bash
 cd backend
@@ -76,6 +87,23 @@ A full JSON report (per-photo results + aggregate) is written to
 gitignored, as is any `test-photos/` or `photos/` folder — real site
 photos should never be committed to this repo.
 
+## Ingesting into permanent storage
+
+```bash
+npm run ingest -- /path/to/folder/of/photos
+npm run list-photos           # run in a fresh process to prove persistence
+```
+
+`ingest.js` analyzes each photo exactly like the proving script, but
+persists every success: the original photo bytes are copied to
+`backend/data/photos/`, and its full analysis (caption, category,
+equipment, conditions, activities, OCR text, keywords, confidence) is
+written to `backend/data/capture.db` (SQLite). `backend/data/` is
+gitignored — it's real site data and local test output, not something to
+commit. `list-photos.js` opens the store in a brand new process, so
+running it after `ingest.js` has fully exited proves the data survives
+closing and reopening the app, not just staying alive in memory.
+
 ### Validation status
 
 **Phase 1 gate (>90% success on 15-20 real photos): met.** Run against 20
@@ -107,6 +135,17 @@ inflates latency (avg ~35-45s/photo across the 20-photo runs, vs. ~3-20s
 for a call that doesn't get rate-limited) and a 100-photo batch would take
 a long time until the limit is raised at console.anthropic.com/settings/limits.
 
+**Phase 3 (storage): built and verified.** Ran `ingest.js` on the full
+20-photo test batch — 20/20 analyzed and stored (original bytes + full
+metadata). Queried the store from a completely separate process
+invocation (`list-photos.js`) and got back all 20 records with correctly
+round-tripped JSON fields (equipment/conditions/activities/keywords arrays
+intact). Also verified `updatePhoto` — set Site/Project/Work Type/note on
+a record, closed the store, reopened it fresh, and the update was still
+there with unrelated fields (e.g. equipment) untouched. This is the
+concrete proof persistence survives closing and reopening the app, which
+was a stated limitation of the artifact prototype.
+
 ## What the vision call returns
 
 Per photo: caption, category (fixed list), equipment (open vocabulary,
@@ -119,14 +158,27 @@ from readings (chlorine ppm, temperature, etc. into real fields) is
 deferred per the brief's own note — currently those live as raw OCR text,
 not parsed fields.
 
+## Storage design
+
+SQLite (`backend/data/capture.db`) for metadata + local filesystem
+(`backend/data/photos/`) for original photo bytes, chosen over Google
+Drive for Phase 3 because it needs no external OAuth/account setup and is
+trivial to run in this environment — the brief explicitly left this
+decision open ("Google Drive... or a proper database if that proves
+simpler"). Every caller only touches the five methods on `lib/store.js`'s
+interface (`addPhoto`/`getPhoto`/`listPhotos`/`updatePhoto`/
+`photoFilePath`), so a Google Drive-backed implementation of the same
+interface could replace this file later without touching the API layer or
+frontend. The schema already has nullable `site`/`project`/`workType`/
+`note` columns for Phase 4's dump-first-tag-later flow — reserved now so
+there's no migration surprise later, but no tagging logic exists yet.
+
 ## Next steps
 
-1. **Phase 3** — real storage (Google Drive or a database, decided once
-   this is solid — it is) behind an interface, so it's swappable later.
-   Must survive closing and reopening the app.
-2. **Phase 4** — UI: ledger view (not grid) as default, dump-first/tag-later
-   upload, untagged review queue, natural-language search, editable AI
-   tags, one-tap caption copy, per-photo retry with real errors, session
-   summaries.
+**Phase 4** — UI: ledger view (not grid) as default, dump-first/tag-later
+upload, untagged review queue, natural-language search, editable AI tags,
+one-tap caption copy, per-photo retry with real errors, session summaries.
+This is also when the Express API layer gets built — endpoints only get
+added once the frontend actually needs them.
 
 See the full build brief for detail on each phase.
