@@ -7,3 +7,7 @@ backend/output/
 # they may contain confidential client/site information.
 test-photos/
 /photos/
+
+# Persisted storage — original photo bytes + SQLite metadata. Real site
+# data, never committed; also where local test runs accumulate.
+backend/data/
