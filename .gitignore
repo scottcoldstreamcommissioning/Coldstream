@@ -1,0 +1,9 @@
+node_modules/
+.env
+backend/output/
+*.log
+
+# Real site photos used for local testing must never be committed —
+# they may contain confidential client/site information.
+test-photos/
+/photos/
