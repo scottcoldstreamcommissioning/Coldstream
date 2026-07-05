@@ -50,6 +50,23 @@ export const EQUIPMENT_VOCABULARY = [
   "Pressurisation Units",
 ];
 
+// From the build brief — a closed, specific set (unlike equipment), so it's
+// enforced as a strict enum: consistent condition tags matter more for
+// filtering/search than accommodating an unanticipated term here.
+export const CONDITION_TAGS = [
+  "Clean",
+  "Dirty",
+  "Corroded",
+  "Leaking",
+  "Damaged",
+  "Good Condition",
+  "Missing Insulation",
+  "Missing Label",
+  "Poor Access",
+  "Before",
+  "After",
+];
+
 export const SUPPORTED_EXTENSIONS = new Set([
   ".jpg",
   ".jpeg",
@@ -80,7 +97,7 @@ const TOOL_NAME = "record_photo_analysis";
 function buildTool() {
   return {
     name: TOOL_NAME,
-    description: "Record the caption, category, and equipment detected for this site photo.",
+    description: "Record the caption, category, equipment, and condition tags for this site photo.",
     input_schema: {
       type: "object",
       properties: {
@@ -100,15 +117,23 @@ function buildTool() {
           description:
             "Distinct pieces of equipment visibly identifiable in the photo (0-6 items). Prefer standard terms (e.g. Pumps, BMS Controllers, Cold Water Storage Tanks) but use a concise engineering term for anything not on the standard list. Empty array if no specific equipment is identifiable.",
         },
+        conditions: {
+          type: "array",
+          items: { type: "string", enum: CONDITION_TAGS },
+          description:
+            "Only conditions clearly visible in the photo itself — do not guess. Empty array if nothing notable applies. 'Before'/'After' only if the photo is explicitly labelled or captioned as such by the engineer; never infer it.",
+        },
       },
-      required: ["caption", "category", "equipment"],
+      required: ["caption", "category", "equipment", "conditions"],
     },
   };
 }
 
-const PROMPT = `You are looking at a site photo taken by a mechanical/water hygiene commissioning engineer. Call ${TOOL_NAME} with exactly one caption, exactly one category, and the equipment visible in this photo. Do not describe more than what is asked. If there is handwritten or printed text, a gauge reading, or a screen/display visible, include the literal text/value in the caption.
+const PROMPT = `You are looking at a site photo taken by a mechanical/water hygiene commissioning engineer. Call ${TOOL_NAME} with exactly one caption, exactly one category, the equipment visible, and any condition tags that clearly apply. Do not describe more than what is asked. If there is handwritten or printed text, a gauge reading, or a screen/display visible, include the literal text/value in the caption.
 
-Standard equipment vocabulary (prefer these terms when they fit, but don't force a bad fit): ${EQUIPMENT_VOCABULARY.join(", ")}.`;
+Standard equipment vocabulary (prefer these terms when they fit, but don't force a bad fit): ${EQUIPMENT_VOCABULARY.join(", ")}.
+
+Condition tags (only apply what's clearly visible, leave empty if nothing notable): ${CONDITION_TAGS.join(", ")}.`;
 
 /**
  * Sends one photo to Claude vision and returns its caption + category.
@@ -145,6 +170,7 @@ export async function analyzePhoto(client, model, filePath) {
     caption: toolUse.input.caption,
     category: toolUse.input.category,
     equipment: toolUse.input.equipment,
+    conditions: toolUse.input.conditions,
     usage: response.usage,
   };
 }
